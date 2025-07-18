@@ -1,35 +1,49 @@
 import streamlit as st
-import openai
+from openai import OpenAI
+
+# Initialize OpenAI client using your API key from secrets
+client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
 st.title("🧠 AI Radiology Dictation Assistant")
+st.markdown("Dictate or paste your radiology case details below. The assistant will ask clarifying questions and generate a structured report.")
 
-openai.api_key = st.secrets["OPENAI_API_KEY"]
+# Step 1: Input the case
+case_input = st.text_area("🗣️ Case Dictation", placeholder="E.g., CT Abdomen shows a 2.5 cm liver lesion in segment VIII...", height=200)
 
-# Step 1: Dictation
-dictation = st.text_area("🗣️ Dictate your case here:")
+if st.button("Generate Questions and Report"):
+    if not case_input.strip():
+        st.warning("Please enter case details first.")
+    else:
+        with st.spinner("💬 Thinking..."):
 
-if dictation:
-    # Step 2: Generate follow-up questions
-    with st.spinner("🤖 Thinking..."):
-        prompt_qs = f"You are a radiology assistant. The radiologist dictated the following case: {dictation}\n\nSuggest 2-3 specific follow-up questions to clarify findings."
-        q_response = openai.ChatCompletion.create(
-            model="gpt-4",
-            messages=[{"role": "user", "content": prompt_qs}],
-            temperature=0.4
-        )
-        questions = q_response.choices[0].message.content
-        st.subheader("🔍 Suggested Follow-up Questions:")
-        st.write(questions)
+            # Step 2: Ask the model to generate follow-up questions
+            prompt_qs = (
+                "You are a radiology assistant. Based on this dictated case, ask 2–3 concise follow-up questions "
+                "to clarify or improve the final report:\n\n" + case_input
+            )
 
-    # Step 3: Generate structured report
-    if st.button("📝 Generate Report"):
-        with st.spinner("Compiling report..."):
-            prompt_report = f"Write a structured radiology report and impression based on this dictation: {dictation}"
-            report_response = openai.ChatCompletion.create(
+            q_response = client.chat.completions.create(
+                model="gpt-4",
+                messages=[{"role": "user", "content": prompt_qs}],
+                temperature=0.4,
+            )
+
+            followup_questions = q_response.choices[0].message.content.strip()
+            st.subheader("🤔 Suggested Follow-up Questions")
+            st.markdown(followup_questions)
+
+            # Step 3: Use case input to generate a clean report with impression
+            prompt_report = (
+                "You are a radiology AI assistant. Read the following case dictation and generate a concise, "
+                "structured radiology report with headings (FINDINGS and IMPRESSION):\n\n" + case_input
+            )
+
+            report_response = client.chat.completions.create(
                 model="gpt-4",
                 messages=[{"role": "user", "content": prompt_report}],
-                temperature=0.3
+                temperature=0.3,
             )
-            report = report_response.choices[0].message.content
-            st.subheader("📄 Structured Report:")
-            st.write(report)
+
+            final_report = report_response.choices[0].message.content.strip()
+            st.subheader("📄 Final Report")
+            st.text(final_report)
